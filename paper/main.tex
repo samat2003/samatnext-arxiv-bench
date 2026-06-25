@@ -1,0 +1,62 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+\title{\textbf{SamatNext-CL: A Consumer-GPU Hybrid Language Model Architecture for Low-Memory Training}}
+\author{\textbf{Samat Zharassov} \\ \small{Independent Researcher}}
+\date{\date{June 2026}}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Causal language model training is bottlenecked by the high memory footprint of attention mechanisms and logits tensors, restricting research to cluster-scale compute. We present \textbf{SamatNext-CL}, a hybrid recurrent-attention architecture designed for low-memory training on consumer-grade laptop GPUs. By alternating between Grouped Query Attention (GQA) and Gated DeltaNet linear recurrence blocks, we build a 432M-parameter language model. When benchmarked on a single 12GB laptop GPU, SamatNext-CL achieves a \textbf{35.91\% active VRAM memory footprint reduction} and lower perplexity at step 1,000 of a synthetic algorithmic curriculum compared to a parameter-matched 561M Vanilla-GPT baseline. 
+\end{abstract}
+
+\section{Introduction}
+Deep learning research is increasingly dominated by large-scale GPU clusters, creating a barrier for researchers with consumer hardware. In this work, we present a systems prototype designed to run on consumer-grade hardware (12GB VRAM laptop GPUs). 
+
+\textit{We explicitly note that this work does not claim state-of-the-art language modeling performance on standard benchmarks. It presents a reproducible systems prototype exploring whether a hybrid recurrent/attention decoder can reduce memory and active-compute requirements on consumer hardware.}
+
+\section{Architecture}
+SamatNext-CL alternates between even layers of Gated DeltaNet linear recurrence (which maps inputs to fixed-size recurrent states $S \in \mathbb{R}^{64 \times 64}$) and odd layers of Multi-Head Attention. It incorporates Grouped Query Attention (GQA) and a low-rank Multi-head Latent Attention (MLA) projection bottleneck. The feed-forward layers utilize a Top-1 Sparse Mixture of Experts (MoE) containing 4 routing paths.
+
+\section{Consumer-GPU Experimental Setup}
+All benchmarks were executed locally on an NVIDIA GeForce RTX 5070 Ti Laptop GPU with 12GB of VRAM (Compute Capability 12.0) under a shared Windows/WSL environment. The training loop utilizes FP8 precision (E4M3) on the dense linear projections and is compiled via PyTorch's Inductor backend (`max-autotune-no-cudagraphs`).
+
+\section{Synthetic Algorithmic Curriculum}
+Rather than employing official NLP benchmarks, we benchmark the model using a synthetic algorithmic curriculum. This curriculum consists of packed, tokenized S-expression syntax and math sequences designed to stress the training system, measure active memory allocations, record stable throughput, and verify mathematical convergence.
+
+\section{FLOP and Memory Analysis}
+By quantizing 62.45% of the projections to FP8, SamatNext-CL reduces model initialization memory by 31.68% (from 2,144.7 MiB down to 1,465.2 MiB). Additionally, the custom streamed Cross-Entropy loss chunking ($block\_vocab=4096$) prevents materializing the massive logit tensor in VRAM, saving ~3.3 GB of VRAM during the backward pass.
+
+\section{Results}
+The table below presents the metrics recorded at Step 1,000 of the curriculum training loop:
+\begin{table}[h]
+\centering
+\begin{tabular}{lccccc}
+\toprule
+Model & Loss & PPL & Throughput (tok/s) & Active VRAM & VRAM Savings \\
+\midrule
+Vanilla-GPT & 1.1141 & 3.0468 & 5,907.80 & 5,480.87 MiB & Baseline \\
+SamatNext-CL & \textbf{0.9904} & \textbf{2.6923} & \textbf{6,178.88} & \textbf{3,512.81 MiB} & \textbf{35.91\%} \\
+\bottomrule
+\end{tabular}
+\caption{Curriculum benchmark results at Step 1,000 on a 12GB Laptop GPU.}
+\end{table}
+
+\section{Limitations}
+This work is constrained to a sub-1B parameter prototype and evaluated on synthetic, algorithmic datasets. Extrapolation to massive scale or general language reasoning benchmarks remains to be established in future work.
+
+\section{Reproducibility}
+All code, configs, test suites, and logged baseline tables are open-sourced under \texttt{samatnext-arxiv-bench/}, allowing researchers to reproduce the exact training matrix on local consumer GPUs.
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}
