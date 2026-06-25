@@ -1,0 +1,20 @@
+\begin{thebibliography}{1}
+
+\bibitem{mamba}
+Albert Gu and Tri Dao.
+\newblock Mamba: Linear-time sequence modeling with selective states.
+\newblock {\em arXiv preprint arXiv:2312.00752}, 2023.
+
+\bibitem{torchao}
+PyTorch Team.
+\newblock Torchao: Architecture-optimization library for pytorch.
+\newblock {\em GitHub Repository}, 2024.
+
+\bibitem{deltanet}
+Songlin Yang, Yu~Wang, Ruixiang Zhang, Yujia Shen, Daniel Harer, Philip Garner,
+  et~al.
+\newblock Gated linear attention transformers with backpropagation through
+  time.
+\newblock {\em arXiv preprint arXiv:2403.19961}, 2024.
+
+\end{thebibliography}

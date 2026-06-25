@@ -4,3 +4,7 @@ __pycache__/
 data/
 *.pt
 *.log
+*.aux
+*.blg
+*.out
+*.pdf
