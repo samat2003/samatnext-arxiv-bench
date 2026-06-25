@@ -4,6 +4,7 @@
 \usepackage{booktabs}
 \usepackage{hyperref}
 \usepackage{geometry}
+\usepackage{graphicx}
 \geometry{margin=1in}
 
 \title{\textbf{SamatNext-CL: A Consumer-GPU Hybrid Language Model Architecture for Low-Memory Training}}
@@ -103,7 +104,7 @@ python run_curriculum_experiment.py \
 \end{verbatim}
 
 \section{FLOP and Memory Analysis}
-SamatNext-CL reduces memory pressure through a combination of lower active compute, sparse feed-forward routing, mixed-precision projection layers, and streamed cross-entropy computation. In the local benchmark configuration, 62.45\% of eligible projections are quantized to FP8, reducing model initialization memory by 31.68\% from 2,144.7 MiB to 1,465.2 MiB. Additionally, the custom streamed cross-entropy loss chunks the vocabulary dimension with $block\_vocab=4096$, avoiding full materialization of the large logits tensor in VRAM and reducing backward-pass memory pressure.
+SamatNext-CL reduces memory pressure through a combination of lower active compute, sparse feed-forward routing, mixed-precision projection layers, and streamed cross-entropy computation. In the optional FP8 benchmark configuration, 62.45\% of eligible projections are quantized to FP8, reducing model initialization memory by 31.68\% from 2,144.7 MiB to 1,465.2 MiB. Additionally, the custom streamed cross-entropy loss chunks the vocabulary dimension with $block\_vocab=4096$, avoiding full materialization of the large logits tensor in VRAM and reducing backward-pass memory pressure.
 
 The FLOP values reported in this paper are \textbf{architecture-specific analytical active-path estimates}. They are not profiler-measured operator counts. These estimates are useful for comparing the intended compute structure of the hybrid recurrent/attention architecture against the dense Transformer baseline, but they should not be interpreted as exact hardware-level executed FLOPs.
 
@@ -113,6 +114,7 @@ Table~\ref{tab:results} presents the comparative results recorded at step 1,000 
 \begin{table}[h]
 \centering
 \small
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{lcccccc}
 \toprule
 Model & Total Params & Routing / Execution & Analytical Active-Path FLOPs/token & Throughput & VRAM & Loss (PPL) \\
@@ -120,7 +122,8 @@ Model & Total Params & Routing / Execution & Analytical Active-Path FLOPs/token 
 Vanilla-GPT & 561.6M & dense & $3.52 \times 10^9$ & 5,907.80 & 5,480.87 MiB & 1.1141 (3.047) \\
 SamatNext-CL & \textbf{432.5M} & routed/masked & $\mathbf{1.47 \times 10^9}$ & \textbf{6,178.88} & \textbf{3,512.81 MiB} & \textbf{0.9904 (2.692)} \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \caption{Comparative performance at step 1,000 of the synthetic curriculum benchmark. FLOP values represent architecture-specific analytical active-path estimates. They are not profiler-measured executed FLOPs for the current PyTorch implementation. VRAM refers to peak allocated memory in the local benchmark configuration.}
 \label{tab:results}
 \end{table}
