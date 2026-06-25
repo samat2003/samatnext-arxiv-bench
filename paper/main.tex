@@ -8,50 +8,100 @@
 
 \title{\textbf{SamatNext-CL: A Consumer-GPU Hybrid Language Model Architecture for Low-Memory Training}}
 \author{\textbf{Samat Zharassov} \\ \small{Independent Researcher}}
-\date{\date{June 2026}}
+\date{June 2026}
 
 \begin{document}
 
 \maketitle
 
 \begin{abstract}
-Causal language model training is bottlenecked by the high memory footprint of attention mechanisms and logits tensors, restricting research to cluster-scale compute. We present \textbf{SamatNext-CL}, a hybrid recurrent-attention architecture designed for low-memory training on consumer-grade laptop GPUs. By alternating between Grouped Query Attention (GQA) and Gated DeltaNet linear recurrence blocks, we build a 432M-parameter language model. When benchmarked on a single 12GB laptop GPU, SamatNext-CL achieves a \textbf{35.91\% active VRAM memory footprint reduction} and lower perplexity at step 1,000 of a synthetic algorithmic curriculum compared to a parameter-matched 561M Vanilla-GPT baseline. 
+Causal language model training is bottlenecked by the high memory footprint of attention mechanisms and logits tensors, restricting research to cluster-scale compute. We present \textbf{SamatNext-CL}, a hybrid recurrent-attention architecture designed for low-memory training on consumer-grade laptop GPUs. By alternating between Grouped Query Attention (GQA) and Gated DeltaNet linear recurrence blocks, we build a 432M-parameter language model. When benchmarked on a single 12GB laptop GPU, SamatNext-CL achieves a \textbf{35.91\% lower peak allocated VRAM in our local synthetic benchmark configuration} and lower perplexity at step 1,000 of a synthetic algorithmic curriculum compared to a parameter-matched 561M Vanilla-GPT baseline. 
 \end{abstract}
 
 \section{Introduction}
-Deep learning research is increasingly dominated by large-scale GPU clusters, creating a barrier for researchers with consumer hardware. In this work, we present a systems prototype designed to run on consumer-grade hardware (12GB VRAM laptop GPUs). 
+Deep learning research is increasingly dominated by large-scale GPU clusters, creating a barrier for researchers with consumer hardware. 
 
-\textit{We explicitly note that this work does not claim state-of-the-art language modeling performance on standard benchmarks. It presents a reproducible systems prototype exploring whether a hybrid recurrent/attention decoder can reduce memory and active-compute requirements on consumer hardware.}
+This work presents a preliminary consumer-GPU systems prototype. We do not claim state-of-the-art language modeling or coding benchmark performance. The goal is to test whether a hybrid recurrent/attention decoder can reduce memory and analytical training FLOPs under a reproducible local benchmark on a 12GB laptop GPU.
+
+The repository code and reproduction files are open-sourced on GitHub at: \\
+\url{https://github.com/samat-zharassov/samatnext-arxiv-bench}
 
 \section{Architecture}
 SamatNext-CL alternates between even layers of Gated DeltaNet linear recurrence (which maps inputs to fixed-size recurrent states $S \in \mathbb{R}^{64 \times 64}$) and odd layers of Multi-Head Attention. It incorporates Grouped Query Attention (GQA) and a low-rank Multi-head Latent Attention (MLA) projection bottleneck. The feed-forward layers utilize a Top-1 Sparse Mixture of Experts (MoE) containing 4 routing paths.
 
 \section{Consumer-GPU Experimental Setup}
-All benchmarks were executed locally on an NVIDIA GeForce RTX 5070 Ti Laptop GPU with 12GB of VRAM (Compute Capability 12.0) under a shared Windows/WSL environment. The training loop utilizes FP8 precision (E4M3) on the dense linear projections and is compiled via PyTorch's Inductor backend (`max-autotune-no-cudagraphs`).
+All benchmarks were executed locally under a shared Windows/WSL environment. The hardware and software configuration of the local environment is detailed in Table~\ref{tab:env}.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Field} & \textbf{Value} \\
+\midrule
+GPU & NVIDIA GeForce RTX 5070 Ti Laptop GPU \\
+VRAM / Memory Limit & 12,227 MiB \\
+Compute Capability & 12.0 (\texttt{sm\_120}) \\
+CUDA Driver / Runtime & 610.47 / 12.8 \\
+PyTorch Version & 2.12.0.dev20260408+cu128 \\
+TorchAO Version & 0.17.0 \\
+Operating System & Windows / WSL2 (Ubuntu 24.04) \\
+Training Precision & FP8 (E4M3) via TorchAO \texttt{Float8Linear} \\
+Compiler Mode & \texttt{max-autotune-no-cudagraphs} \\
+\bottomrule
+\end{tabular}
+\caption{Exact hardware and software configuration.}
+\label{tab:env}
+\end{table}
 
 \section{Synthetic Algorithmic Curriculum}
-Rather than employing official NLP benchmarks, we benchmark the model using a synthetic algorithmic curriculum. This curriculum consists of packed, tokenized S-expression syntax and math sequences designed to stress the training system, measure active memory allocations, record stable throughput, and verify mathematical convergence.
+Rather than employing official NLP coding benchmarks, we benchmark the model using a synthetic algorithmic curriculum. This curriculum consists of packed, tokenized S-expression syntax and math sequences designed to stress the training system, measure active memory allocations, record stable throughput, and verify mathematical convergence.
+
+\subsection{Reproduction Commands}
+The benchmark can be reproduced locally via the following commands:
+\begin{verbatim}
+# 1. Install dependencies
+pip install -r requirements.txt
+
+# 2. Generate synthetic algorithmic curriculum shards
+python make_dummy_data.py --num-shards 5 --tokens-per-shard 10000000 --out-dir data/
+
+# 3. Benchmark SamatNext-CL Hybrid
+python run_curriculum_experiment.py --model samatnext --steps 1000 \
+    --data-dir data/ --out-dir results/curriculum_experiment/
+
+# 4. Benchmark Vanilla-GPT Transformer
+python run_curriculum_experiment.py --model vanilla --steps 1000 \
+    --data-dir data/ --out-dir results/curriculum_experiment/
+\end{verbatim}
 
 \section{FLOP and Memory Analysis}
-By quantizing 62.45% of the projections to FP8, SamatNext-CL reduces model initialization memory by 31.68% (from 2,144.7 MiB down to 1,465.2 MiB). Additionally, the custom streamed Cross-Entropy loss chunking ($block\_vocab=4096$) prevents materializing the massive logit tensor in VRAM, saving ~3.3 GB of VRAM during the backward pass.
+By quantizing 62.45\% of the projections to FP8, SamatNext-CL reduces model initialization memory by 31.68\% (from 2,144.7 MiB down to 1,465.2 MiB). Additionally, the custom streamed Cross-Entropy loss chunking ($block\_vocab=4096$) prevents materializing the massive logit tensor in VRAM, saving ~3.3 GB of VRAM during the backward pass.
 
 \section{Results}
-The table below presents the metrics recorded at Step 1,000 of the curriculum training loop:
+Table~\ref{tab:results} presents the comparative results recorded at Step 1,000 of the curriculum training loop.
+
 \begin{table}[h]
 \centering
 \begin{tabular}{lccccc}
 \toprule
-Model & Loss & PPL & Throughput (tok/s) & Active VRAM & VRAM Savings \\
+Model & Params & Analytical FLOPs/token & Throughput (tok/s) & Allocated VRAM & Final Loss (PPL) \\
 \midrule
-Vanilla-GPT & 1.1141 & 3.0468 & 5,907.80 & 5,480.87 MiB & Baseline \\
-SamatNext-CL & \textbf{0.9904} & \textbf{2.6923} & \textbf{6,178.88} & \textbf{3,512.81 MiB} & \textbf{35.91\%} \\
+Vanilla-GPT & 561.6M & $3.52 \times 10^9$ & 5,907.80 & 5,480.87 MiB & 1.1141 (3.047) \\
+SamatNext-CL & \textbf{432.5M} & $\mathbf{1.47 \times 10^9}$ & \textbf{6,178.88} & \textbf{3,512.81 MiB} & \textbf{0.9904 (2.692)} \\
 \bottomrule
 \end{tabular}
-\caption{Curriculum benchmark results at Step 1,000 on a 12GB Laptop GPU.}
+\caption{Comparative performance at Step 1,000. FLOP values represent architecture-specific analytical FLOP estimates.}
+\label{tab:results}
 \end{table}
 
 \section{Limitations}
-This work is constrained to a sub-1B parameter prototype and evaluated on synthetic, algorithmic datasets. Extrapolation to massive scale or general language reasoning benchmarks remains to be established in future work.
+Several key limitations apply to this study:
+\begin{itemize}
+\item \textbf{Scale Constraint}: The model sizes are limited to the sub-1B parameter class ($\sim$400M parameters) because of the consumer hardware setup.
+\item \textbf{Lack of Official Coding Benchmarks}: The models are evaluated on synthetic, algorithmic datasets to check mechanics and metrics. We do not report performance on standard evaluations such as HumanEval or MBPP.
+\item \textbf{Analytical FLOP Model}: The FLOP figures reported are architecture-specific analytical FLOP estimates rather than operator-level measured counters.
+\item \textbf{Triton Compile Overhead}: The custom DeltaNet Triton kernel provides limited performance gains under \texttt{torch.compile} compared to eager mode execution.
+\end{itemize}
 
 \section{Reproducibility}
 All code, configs, test suites, and logged baseline tables are open-sourced under \texttt{samatnext-arxiv-bench/}, allowing researchers to reproduce the exact training matrix on local consumer GPUs.

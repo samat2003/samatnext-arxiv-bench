@@ -1,25 +1,32 @@
 # SamatNext-CL: A Consumer-GPU Hybrid Language Model Architecture for Low-Memory Training
 
 > **Systems / Architecture Preprint**  
+> **GitHub Repository:** [https://github.com/samat-zharassov/samatnext-arxiv-bench](https://github.com/samat-zharassov/samatnext-arxiv-bench)  
 > **Target Hardware Class:** Consumer-grade Laptop GPUs (12GB VRAM class, e.g., NVIDIA RTX 4070 / 5070 Laptop GPUs).  
 >
-> **Important Framing:** This work does not claim state-of-the-art language modeling performance on standard benchmark leaderboards (e.g. MBPP, HumanEval). It presents a reproducible systems prototype exploring whether a hybrid recurrent/attention decoder can reduce active VRAM footprint and compute requirements on consumer hardware during training.
+> **Important Framing:** This work presents a preliminary consumer-GPU systems prototype. We do not claim state-of-the-art language modeling or coding benchmark performance. The goal is to test whether a hybrid recurrent/attention decoder can reduce memory and analytical training FLOPs under a reproducible local benchmark on a 12GB laptop GPU.
 
 ---
 
-## 1. Project Overview
+## 1. Environment Specifications
 
-This repository contains the code, baseline telemetry, and LaTeX preprint source for **SamatNext-CL**, a hybrid GQA-DeltaNet language model designed for efficient, low-memory training on consumer hardware. 
+All benchmarks were executed locally under a shared Windows/WSL environment. The hardware and software configuration of the local environment is detailed below:
 
-The architecture alternates between:
-*   **Differential Attention (Grouped Query Attention - GQA)**: For global context and retrieval.
-*   **Gated DeltaNet Recurrence**: For linear-time sequential state compression.
-
-We benchmark SamatNext-CL against a parameter-matched **Vanilla-GPT** baseline under the exact same hardware constraints and local environment.
+| Field | Value |
+| :--- | :--- |
+| **GPU** | NVIDIA GeForce RTX 5070 Ti Laptop GPU |
+| **VRAM / Memory Limit** | 12,227 MiB |
+| **Compute Capability** | 12.0 (`sm_120`) |
+| **CUDA Driver / Runtime** | 610.47 / 12.8 |
+| **PyTorch Version** | 2.12.0.dev20260408+cu128 |
+| **TorchAO Version** | 0.17.0 |
+| **Operating System** | Windows / WSL2 (Ubuntu 24.04) |
+| **Training Precision** | FP8 (E4M3) via TorchAO `Float8Linear` |
+| **Compiler Mode** | `max-autotune-no-cudagraphs` |
 
 ---
 
-## 2. Model Specifications
+## 2. Comparative Model Specifications
 
 | Attribute | Vanilla-GPT (Baseline) | SamatNext-CL (Hybrid) |
 | :--- | :---: | :---: |
@@ -35,29 +42,47 @@ We benchmark SamatNext-CL against a parameter-matched **Vanilla-GPT** baseline u
 
 ## 3. Core Baseline Benchmarks
 
-These results reflect step 1,000 of the **synthetic algorithmic curriculum** benchmark run on a single local GPU setup:
+These results reflect Step 1,000 of the **synthetic algorithmic curriculum** benchmark run on a single local GPU setup:
 
-| Model | Loss | Perplexity (PPL) | Throughput (tokens/s) | Active VRAM Allocated | VRAM Memory Savings |
+| Model | Params | Analytical FLOPs/token | Throughput (tok/s) | Allocated VRAM | Final Loss (PPL) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Vanilla-GPT** (Transformer) | 1.1141 | 3.0468 | 5,907.80 | 5,480.87 MiB | *Baseline* |
-| **SamatNext-CL** (Hybrid) | **0.9904** | **2.6923** | **6,178.88** | **3,512.81 MiB** | **35.91% lower VRAM** |
+| **Vanilla-GPT** (Baseline) | 561.6M | $3.52 \times 10^9$ | 5,907.80 | 5,480.87 MiB | 1.1141 (3.047) |
+| **SamatNext-CL** (Hybrid) | **432.5M** | **$\mathbf{1.47 \times 10^9}$** | **6,178.88** | **3,512.81 MiB** | **0.9904 (2.692)** |
 
-*Note: Telemetry matrix logs are archived under `results/curriculum_experiment/telemetry_matrix.csv`.*
-
----
-
-## 4. Key Systems Innovations
-
-1.  **Low-Bit FP8 Quantization**: Converted **62.45% of parameters** (attentions QKV, SwiGLU expert gates, and output projections) to **TorchAO Float8Linear (E4M3)**, reducing initial parameter memory by **31.68%** (from 2,144.7 MiB down to 1,465.2 MiB).
-2.  **Streamed Vocabulary-Blocked Loss**: Replaced standard Cross-Entropy with a custom online log-sum-exp streamed projection (`samatnext_fused_ops.py`) that processes the vocabulary in chunks of `block_vocab=4096`. This eliminates the need to materialize the massive `[16384 tokens, 50304 vocabulary]` logit tensor in VRAM, saving **~3.3 GB of VRAM** and accelerating the loss step by **2.85x**.
-3.  **Fused DeltaNet Triton Kernels**: Integrates a fused chunk-wise linear RNN state update to accelerate recurrent steps inside compiler blocks under `torch.compile`.
+*Note: FLOP values represent architecture-specific analytical FLOP estimates. SamatNext-CL achieves **35.91% lower peak allocated VRAM in our local synthetic benchmark configuration**.*
 
 ---
 
-## 5. Reproduction Instructions
+## 4. Raw Telemetry Matrix Logs
+
+Archive of the logged metrics comparison recorded during the 1,000-step training loop:
+
+### SamatNext-CL Hybrid
+*   Step 1: Loss = `11.0363`, PPL = `62084.76`, Throughput = `1253.74 tokens/s`, VRAM = `4315.68 MiB`, Analytical FLOPs/s = `1.84 TFLOP/s`
+*   Step 100: Loss = `1.0053`, PPL = `2.7327`, Throughput = `6616.07 tokens/s`, VRAM = `3512.81 MiB`, Analytical FLOPs/s = `9.74 TFLOP/s`
+*   Step 500: Loss = `0.9946`, PPL = `2.7036`, Throughput = `6604.20 tokens/s`, VRAM = `3512.81 MiB`, Analytical FLOPs/s = `9.72 TFLOP/s`
+*   Step 1000: Loss = `0.9904`, PPL = `2.6923`, Throughput = `6178.88 tokens/s`, VRAM = `3512.81 MiB`, Analytical FLOPs/s = `9.09 TFLOP/s`
+
+### Vanilla-GPT Transformer
+*   Step 1: Loss = `11.0307`, PPL = `61740.59`, Throughput = `3487.48 tokens/s`, VRAM = `7841.21 MiB`, Analytical FLOPs/s = `12.28 TFLOP/s`
+*   Step 100: Loss = `1.1314`, PPL = `3.1001`, Throughput = `5968.69 tokens/s`, VRAM = `5480.87 MiB`, Analytical FLOPs/s = `21.02 TFLOP/s`
+*   Step 500: Loss = `1.0781`, PPL = `2.9391`, Throughput = `6798.62 tokens/s`, VRAM = `5480.87 MiB`, Analytical FLOPs/s = `23.94 TFLOP/s`
+*   Step 1000: Loss = `1.1141`, PPL = `3.0468`, Throughput = `5907.80 tokens/s`, VRAM = `5480.87 MiB`, Analytical FLOPs/s = `20.80 TFLOP/s`
+
+---
+
+## 5. Limitations
+
+*   **Scale Constraint**: Evaluated on sub-1B parameter models ($\sim$400M parameters).
+*   **No Official Coding Benchmarks**: Tested on synthetic algorithmic curricula to analyze systems and memory bounds. No HumanEval or MBPP scores are claimed.
+*   **Analytical Estimator**: FLOP values represent architecture-specific analytical FLOP estimates rather than measured operator-level counters.
+
+---
+
+## 6. Reproduction Instructions
 
 ### Prerequisites
-Ensure you have a PyTorch environment with Triton and CUDA support installed:
+Install the dependencies inside your environment:
 ```bash
 pip install -r requirements.txt
 ```
@@ -77,4 +102,4 @@ python run_curriculum_experiment.py --model samatnext --steps 1000 --data-dir da
 # Run Vanilla-GPT Transformer
 python run_curriculum_experiment.py --model vanilla --steps 1000 --data-dir data/ --out-dir results/curriculum_experiment/
 ```
-The benchmark will write live telemetry (throughput, allocated VRAM, loss, etc.) to `results/curriculum_experiment/telemetry_matrix.csv` for comparison against the baseline figures.
+The benchmark will write live telemetry (throughput, allocated VRAM, loss, PPL) to `results/curriculum_experiment/telemetry_matrix.csv`.
