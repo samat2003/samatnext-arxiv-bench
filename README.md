@@ -1,7 +1,7 @@
 # SamatNext-CL: A Consumer-GPU Hybrid Language Model Architecture for Low-Memory Training
 
 > **Systems / Architecture Preprint**  
-> **GitHub Repository:** [https://github.com/samat-zharassov/samatnext-arxiv-bench](https://github.com/samat-zharassov/samatnext-arxiv-bench)  
+> **GitHub Repository:** [https://github.com/samat2003/samatnext-arxiv-bench](https://github.com/samat2003/samatnext-arxiv-bench)  
 > **Target Hardware Class:** Consumer-grade Laptop GPUs (12GB VRAM class, e.g., NVIDIA RTX 4070 / 5070 Laptop GPUs).  
 >
 > **Important Framing:** This work presents a preliminary consumer-GPU systems prototype. We do not claim state-of-the-art language modeling or coding benchmark performance. The goal is to test whether a hybrid recurrent/attention decoder can reduce memory and analytical training FLOPs under a reproducible local benchmark on a 12GB laptop GPU.
