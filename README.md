@@ -38,18 +38,26 @@ All benchmarks were executed locally under a shared Windows/WSL environment. The
 | **Layer Interleaving** | 100% GQA Attention | Even Layers: DeltaNet Recurrence<br>Odd Layers: Attention / MLA |
 | **Word Embeddings** | Tied | Tied |
 
+### Core Parameter and Compute Clarification
+SamatNext-CL and Vanilla-GPT are both sub-billion-parameter models, but they differ in active compute. Vanilla-GPT uses dense Transformer blocks with most parameters active at every token. SamatNext-CL uses alternating recurrent/attention blocks and Top-1 sparse routing, reducing the active computation per token relative to its total stored parameter count.
+
+To define this clearly:
+*   **Total stored parameters**: All parameters present in the model checkpoint (weights stored on disk).
+*   **Active parameters/token**: Parameters actually used in the token's executed computational path.
+*   **Analytical FLOPs/token**: Architecture-specific estimated compute per token modeled mathematically.
+
 ---
 
 ## 3. Core Baseline Benchmarks
 
 These results reflect Step 1,000 of the **synthetic algorithmic curriculum** benchmark run on a single local GPU setup:
 
-| Model | Params | Analytical FLOPs/token | Throughput (tok/s) | Allocated VRAM | Final Loss (PPL) |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **Vanilla-GPT** (Baseline) | 561.6M | $3.52 \times 10^9$ | 5,907.80 | 5,480.87 MiB | 1.1141 (3.047) |
-| **SamatNext-CL** (Hybrid) | **432.5M** | **$\mathbf{1.47 \times 10^9}$** | **6,178.88** | **3,512.81 MiB** | **0.9904 (2.692)** |
+| Model | Total Params | Active Compute | Analytical FLOPs/token | Throughput (tok/s) | Allocated VRAM | Final Loss (PPL) |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Vanilla-GPT** (Baseline) | 561.6M | dense | $3.52 \times 10^9$ | 5,907.80 | 5,480.87 MiB | 1.1141 (3.047) |
+| **SamatNext-CL** (Hybrid) | **432.5M** | **sparse/routed** | **$\mathbf{1.47 \times 10^9}$** | **6,178.88** | **3,512.81 MiB** | **0.9904 (2.692)** |
 
-*Note: FLOP values represent architecture-specific analytical FLOP estimates. SamatNext-CL achieves **35.91% lower peak allocated VRAM in our local synthetic benchmark configuration**.*
+*Note: FLOP values represent architecture-specific analytical FLOP estimates. SamatNext-CL achieves **35.91% lower peak allocated VRAM in our local synthetic benchmark configuration** compared to the baseline.*
 
 ---
 
@@ -73,9 +81,11 @@ Archive of the logged metrics comparison recorded during the 1,000-step training
 
 ## 5. Limitations
 
-*   **Scale Constraint**: Evaluated on sub-1B parameter models ($\sim$400M parameters).
+*   **Preliminary Systems Prototype**: This is a preliminary systems/architecture prototype.
+*   **Synthetic Local Benchmarks**: Benchmarks are synthetic and local, and are constrained to a personal laptop GPU environment.
 *   **No Official Coding Benchmarks**: Tested on synthetic algorithmic curricula to analyze systems and memory bounds. No HumanEval or MBPP scores are claimed.
-*   **Analytical Estimator**: FLOP values represent architecture-specific analytical FLOP estimates rather than measured operator-level counters.
+*   **Analytical Estimator**: FLOP values represent architecture-specific analytical FLOP estimates rather than profiler-measured operator counts.
+*   **Mismatched Baselines**: The Vanilla-GPT baseline has a larger total parameter count, while SamatNext uses sparse/routed active computation per token.
 
 ---
 
