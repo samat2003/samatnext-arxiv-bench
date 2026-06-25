@@ -32,10 +32,37 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import argparse
 import sys
 from pathlib import Path
 
 import numpy as np
+
+# ---------------------------------------------------------------------------
+# CLI Argument Parser
+# ---------------------------------------------------------------------------
+parser = argparse.ArgumentParser(
+    description="Generate a synthetic tokenized dataset that passes validation checks."
+)
+parser.add_argument(
+    "--num-shards",
+    type=int,
+    default=3,
+    help="Number of shards to generate (default: 3)."
+)
+parser.add_argument(
+    "--tokens-per-shard",
+    type=int,
+    default=None,
+    help="Tokens per shard. If not set, total tokens default to 110,067,776 distributed across shards."
+)
+parser.add_argument(
+    "--out-dir",
+    type=str,
+    default="data",
+    help="Output directory for the generated data (default: data)."
+)
+args = parser.parse_args()
 
 # ---------------------------------------------------------------------------
 # Constants mirrored exactly from production_train_550m.py
@@ -52,12 +79,14 @@ PRE_COOLDOWN_STEPS: int    = 6_497
 COOLDOWN_STEPS: int        = 217
 
 # Total tokens the training run expects to see across all shards
-# = TOTAL_TRAINING_STEPS * TOKENS_PER_STEP
-TOTAL_TOKENS: int = TOTAL_TRAINING_STEPS * TOKENS_PER_STEP   # 110 067 776
-
-# Cooldown boundary: where the learning-rate decay phase begins
-COOLDOWN_START_TOKEN: int = PRE_COOLDOWN_STEPS * TOKENS_PER_STEP   # 106 497 024
-COOLDOWN_END_TOKEN: int   = COOLDOWN_START_TOKEN + COOLDOWN_STEPS * TOKENS_PER_STEP  # 110 049 280
+if args.tokens_per_shard is not None:
+    TOTAL_TOKENS: int = args.num_shards * args.tokens_per_shard
+    COOLDOWN_START_TOKEN: int = int(TOTAL_TOKENS * (PRE_COOLDOWN_STEPS / TOTAL_TRAINING_STEPS))
+    COOLDOWN_END_TOKEN: int   = TOTAL_TOKENS
+else:
+    TOTAL_TOKENS: int = TOTAL_TRAINING_STEPS * TOKENS_PER_STEP   # 110 067 776
+    COOLDOWN_START_TOKEN: int = PRE_COOLDOWN_STEPS * TOKENS_PER_STEP   # 106 497 024
+    COOLDOWN_END_TOKEN: int   = COOLDOWN_START_TOKEN + COOLDOWN_STEPS * TOKENS_PER_STEP  # 110 049 280
 
 # ---------------------------------------------------------------------------
 # Derived check: the trainer asserts
@@ -74,7 +103,7 @@ assert COOLDOWN_END_TOKEN > COOLDOWN_START_TOKEN
 # ---------------------------------------------------------------------------
 # Shard layout
 # ---------------------------------------------------------------------------
-N_SHARDS: int = 3
+N_SHARDS: int = args.num_shards
 # Divide total tokens evenly; last shard absorbs the remainder so that
 # sum(shard_token_counts) == TOTAL_TOKENS exactly.
 base_tokens_per_shard: int = TOTAL_TOKENS // N_SHARDS
@@ -116,7 +145,7 @@ metadata: dict = {
 # ---------------------------------------------------------------------------
 # Write everything
 # ---------------------------------------------------------------------------
-DATA_DIR = Path("data")
+DATA_DIR = Path(args.out_dir)
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 rng = np.random.default_rng(seed=42)

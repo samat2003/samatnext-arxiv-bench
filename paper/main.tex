@@ -58,7 +58,7 @@ CUDA Driver / Runtime & 610.47 / 12.8 \\
 PyTorch Version & 2.12.0.dev20260408+cu128 \\
 TorchAO Version & 0.17.0 \\
 Operating System & Windows / WSL2 (Ubuntu 24.04) \\
-Training Precision & FP8 (E4M3) via TorchAO \texttt{Float8Linear} \\
+Training Precision & BF16 autocast; optional FP8 conversion utilities included but not used in the default benchmark \\
 Compiler Mode & \texttt{max-autotune-no-cudagraphs} \\
 \bottomrule
 \end{tabular}
@@ -78,13 +78,25 @@ pip install -r requirements.txt
 # 2. Generate synthetic algorithmic curriculum shards
 python make_dummy_data.py --num-shards 5 --tokens-per-shard 10000000 --out-dir data/
 
-# 3. Benchmark SamatNext-CL Hybrid
-python run_curriculum_experiment.py --model samatnext --steps 1000 \
-    --data-dir data/ --out-dir results/curriculum_experiment/
+# 3. Run both architectures through the 1,000-step curriculum benchmark run:
+python run_curriculum_experiment.py \
+    --stage 1 \
+    --seq-len 512 \
+    --steps 1000 \
+    --model both
 
-# 4. Benchmark Vanilla-GPT Transformer
-python run_curriculum_experiment.py --model vanilla --steps 1000 \
-    --data-dir data/ --out-dir results/curriculum_experiment/
+# Or separately:
+python run_curriculum_experiment.py \
+    --stage 1 \
+    --seq-len 512 \
+    --steps 1000 \
+    --model SamatNext-CL
+
+python run_curriculum_experiment.py \
+    --stage 1 \
+    --seq-len 512 \
+    --steps 1000 \
+    --model Vanilla-GPT
 \end{verbatim}
 
 \section{FLOP and Memory Analysis}

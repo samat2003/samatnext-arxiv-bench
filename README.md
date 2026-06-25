@@ -21,7 +21,7 @@ All benchmarks were executed locally under a shared Windows/WSL environment. The
 | **PyTorch Version** | 2.12.0.dev20260408+cu128 |
 | **TorchAO Version** | 0.17.0 |
 | **Operating System** | Windows / WSL2 (Ubuntu 24.04) |
-| **Training Precision** | FP8 (E4M3) via TorchAO `Float8Linear` |
+| **Training Precision** | BF16 autocast; optional FP8 conversion utilities included but not used in the default benchmark |
 | **Compiler Mode** | `max-autotune-no-cudagraphs` |
 
 ---
@@ -35,7 +35,7 @@ All benchmarks were executed locally under a shared Windows/WSL environment. The
 | **Hidden Size ($d_{model}$)** | 1024 | 1024 |
 | **MLP / FFN Size** | 5,554 (SwiGLU) | 3,584 (Top-1 Sparse MoE) |
 | **State Dimension** | *N/A (Softmax)* | `d_head=64` (recurrent state $S \in \mathbb{R}^{64 \times 64}$) |
-| **Layer Interleaving** | 100% GQA Attention | Even Layers: DeltaNet Recurrence<br>Odd Layers: Attention / MLA |
+| **Layer Interleaving** | 100% dense causal SDPA attention | Even Layers: DeltaNet Recurrence<br>Odd Layers: Attention / MLA |
 | **Word Embeddings** | Tied | Tied |
 
 ### Core Parameter and Compute Clarification
@@ -106,10 +106,24 @@ python make_dummy_data.py --num-shards 5 --tokens-per-shard 10000000 --out-dir d
 ### Step 2: Run Curriculum Benchmarks
 Run both architectures through the 1,000-step curriculum benchmark run:
 ```bash
-# Run SamatNext-CL Hybrid
-python run_curriculum_experiment.py --model samatnext --steps 1000 --data-dir data/ --out-dir results/curriculum_experiment/
+# Run both models, Stage 1, seq_len 512
+python run_curriculum_experiment.py \
+  --stage 1 \
+  --seq-len 512 \
+  --steps 1000 \
+  --model both
 
-# Run Vanilla-GPT Transformer
-python run_curriculum_experiment.py --model vanilla --steps 1000 --data-dir data/ --out-dir results/curriculum_experiment/
+# Or separately:
+python run_curriculum_experiment.py \
+  --stage 1 \
+  --seq-len 512 \
+  --steps 1000 \
+  --model SamatNext-CL
+
+python run_curriculum_experiment.py \
+  --stage 1 \
+  --seq-len 512 \
+  --steps 1000 \
+  --model Vanilla-GPT
 ```
 The benchmark will write live telemetry (throughput, allocated VRAM, loss, PPL) to `results/curriculum_experiment/telemetry_matrix.csv`.
