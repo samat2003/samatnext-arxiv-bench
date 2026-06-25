@@ -37,10 +37,10 @@ This paper distinguishes between three related but different quantities:
 \begin{itemize}
 \item \textbf{Total stored parameters}: all parameters present in the model checkpoint.
 \item \textbf{Active parameters/token}: the subset of parameters used by the executed computation path for a token.
-\item \textbf{Analytical FLOPs/token}: an architecture-specific estimate of training compute per token.
+\item \textbf{Analytical Active-Path FLOPs/token}: an architecture-specific active-path estimate of training compute per token.
 \end{itemize}
 
-SamatNext-CL and Vanilla-GPT are both sub-billion-parameter models, but they differ in active compute. Vanilla-GPT uses dense Transformer blocks whose attention and feed-forward parameters are active at every token. SamatNext-CL uses alternating recurrent/attention blocks and Top-1 sparse routing, reducing active computation per token relative to its total stored parameter count.
+SamatNext-CL and Vanilla-GPT are both sub-billion-parameter models, but they differ in active compute. Vanilla-GPT uses dense Transformer blocks whose attention and feed-forward parameters are active at every token. SamatNext-CL uses alternating recurrent/attention blocks and Top-1 routed feed-forward selection. In the current benchmark implementation, routing is represented through a masked expert computation path; therefore, the table reports architecture-level routed compute structure rather than a fully optimized sparse-execution kernel.
 
 \section{Consumer-GPU Experimental Setup}
 All benchmarks were executed locally under a shared Windows/WSL environment. The hardware and software configuration of the local environment is detailed in Table~\ref{tab:env}.
@@ -75,8 +75,11 @@ The benchmark can be reproduced locally via the following commands:
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Generate synthetic algorithmic curriculum shards
-python make_dummy_data.py --num-shards 5 --tokens-per-shard 10000000 --out-dir data/
+# 2. Optional: Generate Dummy Binary Shards
+# run_curriculum_experiment.py generates the synthetic Micro-Lisp curriculum
+# internally and does not require external data shards. The following script
+# is kept only for archived production-style dummy-data validation:
+python make_dummy_data.py
 
 # 3. Run both architectures through the 1,000-step curriculum benchmark run:
 python run_curriculum_experiment.py \
@@ -102,7 +105,7 @@ python run_curriculum_experiment.py \
 \section{FLOP and Memory Analysis}
 SamatNext-CL reduces memory pressure through a combination of lower active compute, sparse feed-forward routing, mixed-precision projection layers, and streamed cross-entropy computation. In the local benchmark configuration, 62.45\% of eligible projections are quantized to FP8, reducing model initialization memory by 31.68\% from 2,144.7 MiB to 1,465.2 MiB. Additionally, the custom streamed cross-entropy loss chunks the vocabulary dimension with $block\_vocab=4096$, avoiding full materialization of the large logits tensor in VRAM and reducing backward-pass memory pressure.
 
-The FLOP values reported in this paper are \textbf{architecture-specific analytical estimates}. They are not profiler-measured operator counts. These estimates are useful for comparing the intended compute structure of the hybrid recurrent/attention architecture against the dense Transformer baseline, but they should not be interpreted as exact hardware-level executed FLOPs.
+The FLOP values reported in this paper are \textbf{architecture-specific analytical active-path estimates}. They are not profiler-measured operator counts. These estimates are useful for comparing the intended compute structure of the hybrid recurrent/attention architecture against the dense Transformer baseline, but they should not be interpreted as exact hardware-level executed FLOPs.
 
 \section{Results}
 Table~\ref{tab:results} presents the comparative results recorded at step 1,000 of the synthetic curriculum training loop.
@@ -112,13 +115,13 @@ Table~\ref{tab:results} presents the comparative results recorded at step 1,000 
 \small
 \begin{tabular}{lcccccc}
 \toprule
-Model & Total Params & Active Compute & FLOPs/token & Throughput & VRAM & Loss (PPL) \\
+Model & Total Params & Active Compute & Analytical Active-Path FLOPs/token & Throughput & VRAM & Loss (PPL) \\
 \midrule
 Vanilla-GPT & 561.6M & dense & $3.52 \times 10^9$ & 5,907.80 & 5,480.87 MiB & 1.1141 (3.047) \\
-SamatNext-CL & \textbf{432.5M} & sparse/routed & $\mathbf{1.47 \times 10^9}$ & \textbf{6,178.88} & \textbf{3,512.81 MiB} & \textbf{0.9904 (2.692)} \\
+SamatNext-CL & \textbf{432.5M} & routed/masked & $\mathbf{1.47 \times 10^9}$ & \textbf{6,178.88} & \textbf{3,512.81 MiB} & \textbf{0.9904 (2.692)} \\
 \bottomrule
 \end{tabular}
-\caption{Comparative performance at step 1,000 of the synthetic curriculum benchmark. FLOP values are architecture-specific analytical estimates, not profiler-measured operator counts. VRAM refers to peak allocated memory in the local benchmark configuration.}
+\caption{Comparative performance at step 1,000 of the synthetic curriculum benchmark. FLOP values are architecture-specific analytical active-path estimates, not profiler-measured executed FLOPs for the current PyTorch implementation. VRAM refers to peak allocated memory in the local benchmark configuration.}
 \label{tab:results}
 \end{table}
 
@@ -131,8 +134,8 @@ Several key limitations apply to this study:
 \item \textbf{Preliminary Systems Prototype}: This work is an architecture and systems benchmark, not a claim of state-of-the-art language modeling performance.
 \item \textbf{Scale Constraint}: The experiments are limited to sub-billion-parameter models because of the consumer hardware setup.
 \item \textbf{Synthetic Benchmark}: The models are evaluated on synthetic algorithmic data to check mechanics, throughput, memory behavior, and convergence. We do not report performance on standard evaluations such as HumanEval, MBPP, MMLU, or other official benchmarks.
-\item \textbf{Non-Parameter-Matched Baseline}: The Vanilla-GPT baseline has a larger total parameter count, while SamatNext-CL uses sparse/routed active computation. The comparison is therefore between two local sub-billion-parameter architectures, not a strictly parameter-matched study.
-\item \textbf{Analytical FLOP Model}: The FLOP figures reported are architecture-specific analytical estimates rather than operator-level measured hardware counters.
+\item \textbf{Non-Parameter-Matched Baseline}: The Vanilla-GPT baseline has a larger total parameter count, while SamatNext-CL uses routed/masked active computation. The comparison is therefore between two local sub-billion-parameter architectures, not a strictly parameter-matched study.
+\item \textbf{Analytical FLOP Model}: The FLOP figures reported are architecture-specific analytical active-path estimates rather than operator-level measured hardware counters, and they do not claim profiler-measured executed FLOPs for the current PyTorch implementation.
 \item \textbf{Single Hardware Environment}: Results are measured on one Windows/WSL laptop GPU environment and may differ on Linux workstations, datacenter GPUs, or other software stacks.
 \item \textbf{Triton Compile Overhead}: The custom DeltaNet Triton kernel provides limited performance gains under \texttt{torch.compile} compared to eager mode execution.
 \end{itemize}

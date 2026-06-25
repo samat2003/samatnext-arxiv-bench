@@ -666,7 +666,7 @@ _CSV_HEADER = [
     "execution_valid_pct", "arith_correct_pct",
     "real_token_ratio", "eos_filler_ratio",
     # ── Lightweight efficiency estimates (added as optional future telemetry) ──
-    "flops_per_token",   # architecture-specific analytical estimate, static per model
+    "flops_per_token",   # architecture-specific analytical active-path estimate, static per model
     "tflops_per_s",      # estimated training throughput
     "gpu_watts",         # instantaneous GPU power at log point (pynvml)
     "joules_per_step",   # gpu_watts × step_elapsed_seconds
@@ -764,7 +764,7 @@ def run_experiment(args: argparse.Namespace) -> None:
         n_params          = sum(p.numel() for p in model.parameters())
         flops_per_token   = _estimate_flops_per_token(model_name, args.seq_len)
         print(f"  Parameters:     {n_params:,}")
-        print(f"  FLOPs/token:    {flops_per_token:,}  (architecture-specific analytical estimate)")
+        print(f"  FLOPs/token:    {flops_per_token:,}  (architecture-specific analytical active-path estimate)")
         print(f"  NVML available: {_NVML_OK}")
 
         # ── Optional checkpoint load ────────────────────────────────────────

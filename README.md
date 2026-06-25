@@ -39,12 +39,12 @@ All benchmarks were executed locally under a shared Windows/WSL environment. The
 | **Word Embeddings** | Tied | Tied |
 
 ### Core Parameter and Compute Clarification
-SamatNext-CL and Vanilla-GPT are both sub-billion-parameter models, but they differ in active compute. Vanilla-GPT uses dense Transformer blocks with most parameters active at every token. SamatNext-CL uses alternating recurrent/attention blocks and Top-1 sparse routing, reducing the active computation per token relative to its total stored parameter count.
+SamatNext-CL and Vanilla-GPT are both sub-billion-parameter models, but they differ in active compute. Vanilla-GPT uses dense Transformer blocks with most parameters active at every token. SamatNext-CL uses alternating recurrent/attention blocks and Top-1 routed feed-forward selection. In the current benchmark implementation, routing is represented through a masked expert computation path; therefore, the table reports architecture-level routed compute structure rather than a fully optimized sparse-execution kernel.
 
 To define this clearly:
 *   **Total stored parameters**: All parameters present in the model checkpoint (weights stored on disk).
 *   **Active parameters/token**: Parameters actually used in the token's executed computational path.
-*   **Analytical FLOPs/token**: Architecture-specific estimated compute per token modeled mathematically.
+*   **Analytical Active-Path FLOPs/token**: Architecture-specific active-path estimated compute per token modeled mathematically.
 
 ---
 
@@ -52,12 +52,12 @@ To define this clearly:
 
 These results reflect Step 1,000 of the **synthetic algorithmic curriculum** benchmark run on a single local GPU setup:
 
-| Model | Total Params | Active Compute | Analytical FLOPs/token | Throughput (tok/s) | Allocated VRAM | Final Loss (PPL) |
+| Model | Total Params | Active Compute | Analytical Active-Path FLOPs/token | Throughput (tok/s) | Allocated VRAM | Final Loss (PPL) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Vanilla-GPT** (Baseline) | 561.6M | dense | $3.52 \times 10^9$ | 5,907.80 | 5,480.87 MiB | 1.1141 (3.047) |
-| **SamatNext-CL** (Hybrid) | **432.5M** | **sparse/routed** | **$\mathbf{1.47 \times 10^9}$** | **6,178.88** | **3,512.81 MiB** | **0.9904 (2.692)** |
+| **SamatNext-CL** (Hybrid) | **432.5M** | **routed/masked** | **$\mathbf{1.47 \times 10^9}$** | **6,178.88** | **3,512.81 MiB** | **0.9904 (2.692)** |
 
-*Note: FLOP values represent architecture-specific analytical FLOP estimates. SamatNext-CL achieves **35.91% lower peak allocated VRAM in our local synthetic benchmark configuration** compared to the baseline.*
+*Note: FLOP values are architecture-specific analytical active-path estimates. They do not claim profiler-measured executed FLOPs for the current PyTorch implementation. SamatNext-CL achieves **35.91% lower peak allocated VRAM in our local synthetic benchmark configuration** compared to the baseline.*
 
 ---
 
@@ -84,7 +84,7 @@ Archive of the logged metrics comparison recorded during the 1,000-step training
 *   **Preliminary Systems Prototype**: This is a preliminary systems/architecture prototype.
 *   **Synthetic Local Benchmarks**: Benchmarks are synthetic and local, and are constrained to a personal laptop GPU environment.
 *   **No Official Coding Benchmarks**: Tested on synthetic algorithmic curricula to analyze systems and memory bounds. No HumanEval or MBPP scores are claimed.
-*   **Analytical Estimator**: FLOP values represent architecture-specific analytical FLOP estimates rather than profiler-measured operator counts.
+*   **Analytical Estimator**: FLOP values represent architecture-specific analytical active-path estimates rather than profiler-measured operator counts.
 *   **Mismatched Baselines**: The Vanilla-GPT baseline has a larger total parameter count, while SamatNext uses sparse/routed active computation per token.
 
 ---
@@ -97,10 +97,12 @@ Install the dependencies inside your environment:
 pip install -r requirements.txt
 ```
 
-### Step 1: Generate Synthetic Algorithmic Curriculum Shards
-Create the mock curriculum token data needed to run the benchmarking loops:
+### Optional: Generate Dummy Binary Shards
+
+`run_curriculum_experiment.py` generates the synthetic Micro-Lisp curriculum internally and does not require external data shards. The following script is kept only for archived production-style dummy-data validation:
+
 ```bash
-python make_dummy_data.py --num-shards 5 --tokens-per-shard 10000000 --out-dir data/
+python make_dummy_data.py
 ```
 
 ### Step 2: Run Curriculum Benchmarks
