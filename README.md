@@ -33,17 +33,17 @@ All benchmarks were executed locally under a shared Windows/WSL environment. The
 | **Unique Parameters** | **561,642,904** | **432,517,324** |
 | **Number of Layers** | 24 | 24 |
 | **Hidden Size ($d_{model}$)** | 1024 | 1024 |
-| **MLP / FFN Size** | 5,554 (SwiGLU) | 3,584 (Top-1 Sparse MoE) |
+| **MLP / FFN Size** | 5,554 (SwiGLU) | 3,584 (Top-1 routed/masked MoE) |
 | **State Dimension** | *N/A (Softmax)* | `d_head=64` (recurrent state $S \in \mathbb{R}^{64 \times 64}$) |
 | **Layer Interleaving** | 100% dense causal SDPA attention | Even Layers: DeltaNet Recurrence<br>Odd Layers: Attention / MLA |
 | **Word Embeddings** | Tied | Tied |
 
 ### Core Parameter and Compute Clarification
-SamatNext-CL and Vanilla-GPT are both sub-billion-parameter models, but they differ in active compute. Vanilla-GPT uses dense Transformer blocks with most parameters active at every token. SamatNext-CL uses alternating recurrent/attention blocks and Top-1 routed feed-forward selection. In the current benchmark implementation, routing is represented through a masked expert computation path; therefore, the table reports architecture-level routed compute structure rather than a fully optimized sparse-execution kernel.
+SamatNext-CL and Vanilla-GPT are both sub-billion-parameter models, but they differ in active compute. Vanilla-GPT uses dense Transformer blocks with most parameters active at every token. SamatNext-CL uses alternating recurrent/attention blocks and Top-1 routed feed-forward selection. In the current benchmark implementation, routing is represented through a masked expert computation path rather than a fully optimized sparse-execution kernel. Therefore, the reported FLOP values should be read as architecture-level active-path analytical estimates, not profiler-measured executed FLOPs.
 
 To define this clearly:
 *   **Total stored parameters**: All parameters present in the model checkpoint (weights stored on disk).
-*   **Active parameters/token**: Parameters actually used in the token's executed computational path.
+*   **Routed active path/token**: The architecture-level expert path selected for a token. In the current implementation, expert routing is represented with masking rather than fully sparse kernel execution.
 *   **Analytical Active-Path FLOPs/token**: Architecture-specific active-path estimated compute per token modeled mathematically.
 
 ---
@@ -52,12 +52,12 @@ To define this clearly:
 
 These results reflect Step 1,000 of the **synthetic algorithmic curriculum** benchmark run on a single local GPU setup:
 
-| Model | Total Params | Active Compute | Analytical Active-Path FLOPs/token | Throughput (tok/s) | Allocated VRAM | Final Loss (PPL) |
+| Model | Total Params | Routing / Execution | Analytical Active-Path FLOPs/token | Throughput (tok/s) | Allocated VRAM | Final Loss (PPL) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Vanilla-GPT** (Baseline) | 561.6M | dense | $3.52 \times 10^9$ | 5,907.80 | 5,480.87 MiB | 1.1141 (3.047) |
 | **SamatNext-CL** (Hybrid) | **432.5M** | **routed/masked** | **$\mathbf{1.47 \times 10^9}$** | **6,178.88** | **3,512.81 MiB** | **0.9904 (2.692)** |
 
-*Note: FLOP values are architecture-specific analytical active-path estimates. They do not claim profiler-measured executed FLOPs for the current PyTorch implementation. SamatNext-CL achieves **35.91% lower peak allocated VRAM in our local synthetic benchmark configuration** compared to the baseline.*
+*Note: FLOP values represent architecture-specific analytical active-path estimates. They are not profiler-measured executed FLOPs for the current PyTorch implementation. SamatNext-CL achieves **35.91% lower peak allocated VRAM in our local synthetic benchmark configuration** compared to the baseline.*
 
 ---
 
@@ -84,8 +84,8 @@ Archive of the logged metrics comparison recorded during the 1,000-step training
 *   **Preliminary Systems Prototype**: This is a preliminary systems/architecture prototype.
 *   **Synthetic Local Benchmarks**: Benchmarks are synthetic and local, and are constrained to a personal laptop GPU environment.
 *   **No Official Coding Benchmarks**: Tested on synthetic algorithmic curricula to analyze systems and memory bounds. No HumanEval or MBPP scores are claimed.
-*   **Analytical Estimator**: FLOP values represent architecture-specific analytical active-path estimates rather than profiler-measured operator counts.
-*   **Mismatched Baselines**: The Vanilla-GPT baseline has a larger total parameter count, while SamatNext uses sparse/routed active computation per token.
+*   **Analytical Active-Path Estimator**: FLOP values represent architecture-specific active-path estimates rather than profiler-measured executed operator counts. The current PyTorch implementation uses routed/masked expert computation rather than a fully optimized sparse expert kernel.
+*   **Mismatched Baselines**: The Vanilla-GPT baseline has a larger total parameter count, while SamatNext uses routed/masked feed-forward computation and reports architecture-level active-path estimates.
 
 ---
 

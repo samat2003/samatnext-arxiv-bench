@@ -36,11 +36,11 @@ This paper distinguishes between three related but different quantities:
 
 \begin{itemize}
 \item \textbf{Total stored parameters}: all parameters present in the model checkpoint.
-\item \textbf{Active parameters/token}: the subset of parameters used by the executed computation path for a token.
+\item \textbf{Routed active path/token}: The architecture-level expert path selected for a token. In the current implementation, expert routing is represented with masking rather than fully sparse kernel execution.
 \item \textbf{Analytical Active-Path FLOPs/token}: an architecture-specific active-path estimate of training compute per token.
 \end{itemize}
 
-SamatNext-CL and Vanilla-GPT are both sub-billion-parameter models, but they differ in active compute. Vanilla-GPT uses dense Transformer blocks whose attention and feed-forward parameters are active at every token. SamatNext-CL uses alternating recurrent/attention blocks and Top-1 routed feed-forward selection. In the current benchmark implementation, routing is represented through a masked expert computation path; therefore, the table reports architecture-level routed compute structure rather than a fully optimized sparse-execution kernel.
+SamatNext-CL and Vanilla-GPT are both sub-billion-parameter models, but they differ in active compute. Vanilla-GPT uses dense Transformer blocks whose attention and feed-forward parameters are active at every token. SamatNext-CL uses alternating recurrent/attention blocks and Top-1 routed feed-forward selection. In the current benchmark implementation, routing is represented through a masked expert computation path rather than a fully optimized sparse-execution kernel. Therefore, the reported FLOP values should be read as architecture-level active-path analytical estimates, not profiler-measured executed FLOPs.
 
 \section{Consumer-GPU Experimental Setup}
 All benchmarks were executed locally under a shared Windows/WSL environment. The hardware and software configuration of the local environment is detailed in Table~\ref{tab:env}.
@@ -115,13 +115,13 @@ Table~\ref{tab:results} presents the comparative results recorded at step 1,000 
 \small
 \begin{tabular}{lcccccc}
 \toprule
-Model & Total Params & Active Compute & Analytical Active-Path FLOPs/token & Throughput & VRAM & Loss (PPL) \\
+Model & Total Params & Routing / Execution & Analytical Active-Path FLOPs/token & Throughput & VRAM & Loss (PPL) \\
 \midrule
 Vanilla-GPT & 561.6M & dense & $3.52 \times 10^9$ & 5,907.80 & 5,480.87 MiB & 1.1141 (3.047) \\
 SamatNext-CL & \textbf{432.5M} & routed/masked & $\mathbf{1.47 \times 10^9}$ & \textbf{6,178.88} & \textbf{3,512.81 MiB} & \textbf{0.9904 (2.692)} \\
 \bottomrule
 \end{tabular}
-\caption{Comparative performance at step 1,000 of the synthetic curriculum benchmark. FLOP values are architecture-specific analytical active-path estimates, not profiler-measured executed FLOPs for the current PyTorch implementation. VRAM refers to peak allocated memory in the local benchmark configuration.}
+\caption{Comparative performance at step 1,000 of the synthetic curriculum benchmark. FLOP values represent architecture-specific analytical active-path estimates. They are not profiler-measured executed FLOPs for the current PyTorch implementation. VRAM refers to peak allocated memory in the local benchmark configuration.}
 \label{tab:results}
 \end{table}
 
@@ -134,8 +134,8 @@ Several key limitations apply to this study:
 \item \textbf{Preliminary Systems Prototype}: This work is an architecture and systems benchmark, not a claim of state-of-the-art language modeling performance.
 \item \textbf{Scale Constraint}: The experiments are limited to sub-billion-parameter models because of the consumer hardware setup.
 \item \textbf{Synthetic Benchmark}: The models are evaluated on synthetic algorithmic data to check mechanics, throughput, memory behavior, and convergence. We do not report performance on standard evaluations such as HumanEval, MBPP, MMLU, or other official benchmarks.
-\item \textbf{Non-Parameter-Matched Baseline}: The Vanilla-GPT baseline has a larger total parameter count, while SamatNext-CL uses routed/masked active computation. The comparison is therefore between two local sub-billion-parameter architectures, not a strictly parameter-matched study.
-\item \textbf{Analytical FLOP Model}: The FLOP figures reported are architecture-specific analytical active-path estimates rather than operator-level measured hardware counters, and they do not claim profiler-measured executed FLOPs for the current PyTorch implementation.
+\item \textbf{Non-Parameter-Matched Baseline}: The Vanilla-GPT baseline has a larger total parameter count, while SamatNext uses routed/masked feed-forward computation and reports architecture-level active-path estimates.
+\item \textbf{Analytical Active-Path Estimator}: FLOP values represent architecture-specific active-path estimates rather than profiler-measured executed operator counts. The current PyTorch implementation uses routed/masked expert computation rather than a fully optimized sparse expert kernel.
 \item \textbf{Single Hardware Environment}: Results are measured on one Windows/WSL laptop GPU environment and may differ on Linux workstations, datacenter GPUs, or other software stacks.
 \item \textbf{Triton Compile Overhead}: The custom DeltaNet Triton kernel provides limited performance gains under \texttt{torch.compile} compared to eager mode execution.
 \end{itemize}
