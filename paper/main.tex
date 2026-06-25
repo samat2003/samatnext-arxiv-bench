@@ -15,11 +15,11 @@
 \maketitle
 
 \begin{abstract}
-Causal language model training is bottlenecked by the high memory footprint of attention mechanisms and logits tensors, restricting research to cluster-scale compute. We present the 432.5M-parameter \textbf{SamatNext-CL}, a hybrid recurrent-attention architecture designed for low-memory training on consumer-grade laptop GPUs. By alternating between Grouped Query Attention (GQA) and Gated DeltaNet linear recurrence blocks, we build a hybrid language model. When benchmarked on a single 12GB laptop GPU, SamatNext-CL achieves a \textbf{35.91\% lower peak allocated VRAM in this local synthetic benchmark configuration} and lower perplexity at step 1,000 of a synthetic algorithmic curriculum compared to a 561.6M-parameter dense Vanilla-GPT baseline, while requiring lower architecture-specific analytical FLOPs/token.
+Causal language model training is bottlenecked by activation memory, optimizer state, attention computation, and large vocabulary logits tensors, restricting many architecture experiments to cluster-scale compute. We present \textbf{SamatNext-CL}, a preliminary hybrid recurrent-attention decoder designed for low-memory training on consumer-grade laptop GPUs. The model alternates between recurrent Delta-style sequence mixing blocks and compressed attention blocks, combined with Top-1 sparse feed-forward routing and streamed cross-entropy computation. In a local synthetic curriculum benchmark on a single 12GB laptop GPU, a 432.5M-parameter SamatNext-CL model is compared against a 561.6M-parameter dense Vanilla-GPT baseline under the same benchmark harness. At step 1,000, SamatNext-CL records \textbf{35.91\% lower peak allocated VRAM in our local synthetic benchmark configuration}, lower architecture-specific analytical FLOPs/token, slightly higher measured training throughput, and lower non-padding training loss/PPL on the synthetic curriculum. These results do not establish state-of-the-art language modeling or coding performance; instead, they provide a reproducible consumer-GPU systems benchmark for studying memory-efficient hybrid decoder designs.
 \end{abstract}
 
 \section{Introduction}
-Deep learning research is increasingly dominated by large-scale GPU clusters, creating a barrier for researchers with consumer hardware. 
+Deep learning research is increasingly dominated by large-scale GPU clusters, creating a barrier for researchers with consumer hardware. This barrier is especially visible in language model architecture research, where even sub-billion-parameter experiments can exceed the memory budget of laptop GPUs once optimizer state, activations, attention buffers, and logits tensors are included.
 
 This work presents a preliminary consumer-GPU systems prototype. We do not claim state-of-the-art language modeling or coding benchmark performance. The goal is to test whether a hybrid recurrent/attention decoder can reduce memory and analytical training FLOPs under a reproducible local benchmark on a 12GB laptop GPU.
 
@@ -27,9 +27,20 @@ The repository code and reproduction files are open-sourced on GitHub at: \\
 \url{https://github.com/samat2003/samatnext-arxiv-bench}
 
 \section{Architecture}
-SamatNext-CL alternates between even layers of Gated DeltaNet linear recurrence (which maps inputs to fixed-size recurrent states $S \in \mathbb{R}^{64 \times 64}$) and odd layers of Multi-Head Attention. It incorporates Grouped Query Attention (GQA) and a low-rank Multi-head Latent Attention (MLA) projection bottleneck. The feed-forward layers utilize a Top-1 Sparse Mixture of Experts (MoE) containing 4 routing paths.
+SamatNext-CL is a hybrid decoder-only language model built from an alternating stack of recurrent and attention-style blocks. Even-indexed layers use Gated DeltaNet-style linear recurrence, which maps token representations into fixed-size recurrent state matrices $S \in \mathbb{R}^{64 \times 64}$. Odd-indexed layers use compressed attention blocks that preserve retrieval-style token interaction while reducing the cost of using full dense attention at every layer.
 
-SamatNext-CL and Vanilla-GPT are both sub-billion-parameter models, but they differ in active compute. Vanilla-GPT uses dense Transformer blocks with most parameters active at every token. SamatNext-CL uses alternating recurrent/attention blocks and Top-1 sparse routing, reducing the active computation per token relative to its total stored parameter count.
+The feed-forward path uses a Top-1 sparse Mixture-of-Experts (MoE) module with four routing paths. For each token, the router selects one expert path rather than activating all feed-forward parameters. This distinction is important: SamatNext-CL has a total stored parameter count, but only a subset of routed feed-forward parameters is active for a given token.
+
+\subsection{Total Parameters, Active Compute, and FLOPs}
+This paper distinguishes between three related but different quantities:
+
+\begin{itemize}
+\item \textbf{Total stored parameters}: all parameters present in the model checkpoint.
+\item \textbf{Active parameters/token}: the subset of parameters used by the executed computation path for a token.
+\item \textbf{Analytical FLOPs/token}: an architecture-specific estimate of training compute per token.
+\end{itemize}
+
+SamatNext-CL and Vanilla-GPT are both sub-billion-parameter models, but they differ in active compute. Vanilla-GPT uses dense Transformer blocks whose attention and feed-forward parameters are active at every token. SamatNext-CL uses alternating recurrent/attention blocks and Top-1 sparse routing, reducing active computation per token relative to its total stored parameter count.
 
 \section{Consumer-GPU Experimental Setup}
 All benchmarks were executed locally under a shared Windows/WSL environment. The hardware and software configuration of the local environment is detailed in Table~\ref{tab:env}.
@@ -51,12 +62,12 @@ Training Precision & FP8 (E4M3) via TorchAO \texttt{Float8Linear} \\
 Compiler Mode & \texttt{max-autotune-no-cudagraphs} \\
 \bottomrule
 \end{tabular}
-\caption{Exact hardware and software configuration.}
+\caption{Exact hardware and software configuration used in the local benchmark.}
 \label{tab:env}
 \end{table}
 
 \section{Synthetic Algorithmic Curriculum}
-Rather than employing official NLP coding benchmarks, we benchmark the model using a synthetic algorithmic curriculum. This curriculum consists of packed, tokenized S-expression syntax and math sequences designed to stress the training system, measure active memory allocations, record stable throughput, and verify mathematical convergence.
+Rather than employing official NLP or coding benchmarks, this study uses a synthetic algorithmic curriculum. The curriculum consists of densely packed, tokenized S-expression syntax and arithmetic sequences. Its purpose is not to measure general coding ability, but to stress the training system, measure memory allocation, record stable throughput, verify loss behavior, and check basic syntax/arithmetic convergence under controlled local conditions.
 
 \subsection{Reproduction Commands}
 The benchmark can be reproduced locally via the following commands:
@@ -77,45 +88,45 @@ python run_curriculum_experiment.py --model vanilla --steps 1000 \
 \end{verbatim}
 
 \section{FLOP and Memory Analysis}
-By quantizing 62.45\% of the projections to FP8, SamatNext-CL reduces model initialization memory by 31.68\% (from 2,144.7 MiB down to 1,465.2 MiB). Additionally, the custom streamed Cross-Entropy loss chunking ($block\_vocab=4096$) prevents materializing the massive logit tensor in VRAM, saving ~3.3 GB of VRAM during the backward pass.
+SamatNext-CL reduces memory pressure through a combination of lower active compute, sparse feed-forward routing, mixed-precision projection layers, and streamed cross-entropy computation. In the local benchmark configuration, 62.45\% of eligible projections are quantized to FP8, reducing model initialization memory by 31.68\% from 2,144.7 MiB to 1,465.2 MiB. Additionally, the custom streamed cross-entropy loss chunks the vocabulary dimension with $block\_vocab=4096$, avoiding full materialization of the large logits tensor in VRAM and reducing backward-pass memory pressure.
 
-To prevent overclaiming, we clarify three distinct parameter and compute concepts:
-\begin{itemize}
-\item \textbf{Total stored parameters}: All parameters present in the model checkpoint (weights stored on disk).
-\item \textbf{Active parameters/token}: Parameters actually used in the token's executed computational path.
-\item \textbf{Analytical FLOPs/token}: Architecture-specific estimated compute per token modeled mathematically.
-\end{itemize}
+The FLOP values reported in this paper are \textbf{architecture-specific analytical estimates}. They are not profiler-measured operator counts. These estimates are useful for comparing the intended compute structure of the hybrid recurrent/attention architecture against the dense Transformer baseline, but they should not be interpreted as exact hardware-level executed FLOPs.
 
 \section{Results}
-Table~\ref{tab:results} presents the comparative results recorded at Step 1,000 of the curriculum training loop.
+Table~\ref{tab:results} presents the comparative results recorded at step 1,000 of the synthetic curriculum training loop.
 
 \begin{table}[h]
 \centering
+\small
 \begin{tabular}{lcccccc}
 \toprule
-Model & Total Params & Active Compute & Analytical FLOPs/token & Throughput (tok/s) & Allocated VRAM & Final Loss (PPL) \\
+Model & Total Params & Active Compute & FLOPs/token & Throughput & VRAM & Loss (PPL) \\
 \midrule
 Vanilla-GPT & 561.6M & dense & $3.52 \times 10^9$ & 5,907.80 & 5,480.87 MiB & 1.1141 (3.047) \\
-SamatNext-CL & \textbf{432.5M} & \textbf{sparse/routed} & $\mathbf{1.47 \times 10^9}$ & \textbf{6,178.88} & \textbf{3,512.81 MiB} & \textbf{0.9904 (2.692)} \\
+SamatNext-CL & \textbf{432.5M} & sparse/routed & $\mathbf{1.47 \times 10^9}$ & \textbf{6,178.88} & \textbf{3,512.81 MiB} & \textbf{0.9904 (2.692)} \\
 \bottomrule
 \end{tabular}
-\caption{Comparative performance at Step 1,000 against a comparable sub-billion-parameter dense Vanilla-GPT baseline. FLOP values represent architecture-specific analytical FLOP estimates.}
+\caption{Comparative performance at step 1,000 of the synthetic curriculum benchmark. FLOP values are architecture-specific analytical estimates, not profiler-measured operator counts. VRAM refers to peak allocated memory in the local benchmark configuration.}
 \label{tab:results}
 \end{table}
 
+SamatNext-CL uses fewer total stored parameters than the dense Vanilla-GPT baseline and also uses sparse routed computation in its feed-forward path. Therefore, the result should not be read as a parameter-matched comparison. It should be read as a comparison between a hybrid sparse/recurrent sub-billion-parameter architecture and a larger dense sub-billion-parameter Transformer baseline under the same local consumer-GPU benchmark harness.
+
 \section{Limitations}
 Several key limitations apply to this study:
+
 \begin{itemize}
-\item \textbf{Preliminary Systems Prototype}: This is a preliminary systems/architecture prototype. 
-\item \textbf{Synthetic Local Benchmarks}: Benchmarks are synthetic and local, and are constrained to a personal laptop GPU environment.
-\item \textbf{No Official Coding Benchmarks}: The models are evaluated on synthetic, algorithmic datasets to check mechanics and metrics. We do not report performance on standard evaluations such as HumanEval or MBPP.
-\item \textbf{Analytical FLOP Model}: The FLOP figures reported are architecture-specific analytical FLOP estimates rather than profiler-measured operator counts.
-\item \textbf{Mismatched Baselines}: The Vanilla-GPT baseline has a larger total parameter count, while SamatNext uses sparse/routed active computation per token.
+\item \textbf{Preliminary Systems Prototype}: This work is an architecture and systems benchmark, not a claim of state-of-the-art language modeling performance.
+\item \textbf{Scale Constraint}: The experiments are limited to sub-billion-parameter models because of the consumer hardware setup.
+\item \textbf{Synthetic Benchmark}: The models are evaluated on synthetic algorithmic data to check mechanics, throughput, memory behavior, and convergence. We do not report performance on standard evaluations such as HumanEval, MBPP, MMLU, or other official benchmarks.
+\item \textbf{Non-Parameter-Matched Baseline}: The Vanilla-GPT baseline has a larger total parameter count, while SamatNext-CL uses sparse/routed active computation. The comparison is therefore between two local sub-billion-parameter architectures, not a strictly parameter-matched study.
+\item \textbf{Analytical FLOP Model}: The FLOP figures reported are architecture-specific analytical estimates rather than operator-level measured hardware counters.
+\item \textbf{Single Hardware Environment}: Results are measured on one Windows/WSL laptop GPU environment and may differ on Linux workstations, datacenter GPUs, or other software stacks.
 \item \textbf{Triton Compile Overhead}: The custom DeltaNet Triton kernel provides limited performance gains under \texttt{torch.compile} compared to eager mode execution.
 \end{itemize}
 
 \section{Reproducibility}
-All code, configs, test suites, and logged baseline tables are open-sourced under \texttt{samatnext-arxiv-bench/}, allowing researchers to reproduce the exact training matrix on local consumer GPUs.
+All code, configuration files, test suites, and logged baseline tables are open-sourced under \texttt{samatnext-arxiv-bench/}, allowing researchers to inspect and reproduce the training matrix on comparable local consumer-GPU environments. The repository is intended to support reproducibility of the memory, throughput, analytical FLOP, and synthetic curriculum results reported here.
 
 \bibliographystyle{plain}
 \bibliography{references}
