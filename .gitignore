@@ -9,3 +9,20 @@ data/
 *.out
 *.pdf
 *.zip
+
+# Security hardening — secrets & credentials
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.crt
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Model checkpoints
+checkpoints/
+*.ckpt
