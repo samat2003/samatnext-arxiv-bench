@@ -48,7 +48,7 @@ All benchmarks were executed locally under a shared Windows/WSL environment. The
 
 \begin{table}[h]
 \centering
-\begin{tabular}{ll}
+\begin{tabular}{lp{0.62\textwidth}}
 \toprule
 \textbf{Field} & \textbf{Value} \\
 \midrule
@@ -133,6 +133,7 @@ SamatNext-CL uses fewer total stored parameters than the dense Vanilla-GPT basel
 \section{Limitations}
 Several key limitations apply to this study:
 
+\begin{sloppypar}
 \begin{itemize}
 \item \textbf{Preliminary Systems Prototype}: This work is an architecture and systems benchmark, not a claim of state-of-the-art language modeling performance.
 \item \textbf{Scale Constraint}: The experiments are limited to sub-billion-parameter models because of the consumer hardware setup.
@@ -142,6 +143,7 @@ Several key limitations apply to this study:
 \item \textbf{Single Hardware Environment}: Results are measured on one Windows/WSL laptop GPU environment and may differ on Linux workstations, datacenter GPUs, or other software stacks.
 \item \textbf{Triton Compile Overhead}: The custom DeltaNet Triton kernel provides limited performance gains under \texttt{torch.compile} compared to eager mode execution.
 \end{itemize}
+\end{sloppypar}
 
 \section{Reproducibility}
 All code, configuration files, test suites, and logged baseline tables are open-sourced under \texttt{samatnext-arxiv-bench/}, allowing researchers to inspect and reproduce the training matrix on comparable local consumer-GPU environments. The repository is intended to support reproducibility of the memory, throughput, analytical FLOP, and synthetic curriculum results reported here.
