@@ -3,12 +3,21 @@ __pycache__/
 .pytest_cache/
 data/
 *.pt
-*.log
-*.aux
-*.blg
-*.out
-*.pdf
-*.zip
+# LaTeX build artifacts — contain local filesystem paths & system info
+**/*.log
+**/*.aux
+**/*.blg
+**/*.out
+**/*.pdf
+**/*.zip
+# Explicit paper/ build artifact exclusions (contain Windows path leaks)
+paper/main.log
+paper/main.aux
+paper/main.out
+paper/main.blg
+paper/main.fls
+paper/main.fdb_latexmk
+
 
 # Security hardening — secrets & credentials
 .env
